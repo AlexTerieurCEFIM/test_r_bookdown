@@ -1,0 +1,108 @@
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(tidyverse)
+library(tidyselect)
+library(countrycode)
+
+```
+
+
+```{r nettoyage, include=FALSE}
+consommation_energie <- read_delim("owid-energy-data__OWID.csv") |> 
+  select(iso_code, country, year, matches("_consu")) |> 
+  filter(year >= 1950) |> 
+  mutate_at(c(4:16), ~replace_na(.,0)) |> 
+  mutate(year=as_factor(year))
+
+
+
+
+
+production_alimentaire <- read_delim("Production_Crops_Livestock_E_All_Data.csv") |> 
+  filter(str_detect(Item, "otal")) |> 
+  select("Area Code", Area, "Item Code", Item, "Element Code", Element, Unit, matches("Y[0-9]{4}$")) |> 
+  pivot_longer(cols=8:67,
+               names_to="year",
+               values_to="valeur") |> 
+  mutate(year=str_remove(year, "Y")) |> 
+  mutate(valeur=replace(valeur, is.na(valeur), 0)) |> 
+  mutate(year=as_factor(year))
+
+
+
+# Population
+
+population <- read_delim("WPP2019_POP_F01_1_TOTAL_POPULATION_BOTH_SEXES_UN.csv") |> 
+  select(-Variant) |> 
+  pivot_longer(cols=7:77,
+               names_to="year",
+               values_to="population") |> 
+  rename(region=2) |> 
+  mutate(year=as_factor(year)) |> 
+  mutate(population=str_remove_all(population, " ")) |> 
+  mutate(population=as.integer(population)*1000)
+
+
+
+
+
+# Tables des codes et noms des pays
+
+codes_pays <- consommation_energie |> 
+  select(iso_code, country) |> 
+  distinct(iso_code, country)
+```
+
+# Évolution au niveau mondial
+
+## Consommation mondiale d'énergie
+
+```{r conso_mondiale, echo=FALSE}
+consommation_energie_mondiale <- consommation_energie |> 
+  group_by(year) |> 
+  summarize(renouvelable=sum(renewables_consumption),
+            non_renouvelable=sum(fossil_fuel_consumption)) |> 
+  pivot_longer(cols=renouvelable:non_renouvelable,
+               names_to="type",
+               values_to="valeur")
+
+ggplot(consommation_energie_mondiale)+
+  aes(x=year,
+      y=valeur,
+      fill=type)+
+  scale_x_discrete(breaks=seq(1950, 2020, 10))+
+  geom_col()
+```
+
+-----------------------------------------------------------------------
+
+## Production alimentaire mondiale
+
+```{r prod_mondiale, echo=FALSE}
+production_alimentaire_mondiale <- production_alimentaire |> 
+  mutate(valeur=replace(valeur, is.na(valeur), 0)) |> 
+  group_by(year, Item) |> 
+  summarize(somme=sum(valeur))
+
+ggplot(production_alimentaire_mondiale)+
+  aes(x=year,
+      y=somme,
+      fill=Item)+
+  scale_x_discrete(breaks=seq(1950, 2020, 10))+
+  geom_col()
+```
+
+## Population mondiale
+
+```{r pop_mondiale, echo=FALSE}
+population_mondiale <- population |> 
+  filter(region=="WORLD")
+
+ggplot(population_mondiale)+
+  aes(x=year,
+      y=population,
+      group=1)+
+  scale_x_discrete(breaks=seq(1950, 2020, 10))+
+  geom_line(colour="pink")+
+  geom_point(colour="pink")
+```
